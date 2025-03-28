@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useRef} from "react";
+import React, { useState, useRef } from "react";
 import {
   FaHighlighter,
   FaComment,
@@ -12,9 +12,8 @@ import {
 } from "react-icons/fa";
 import { pdfjs } from "react-pdf";
 
-// Use the `.mjs` file if `.min.js` is unavailable
-pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
-
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+// pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js`;
 // Dynamically import PDF components with SSR disabled
 const Document = dynamic(
   () => import("react-pdf").then((mod) => mod.Document),
@@ -24,14 +23,10 @@ const Document = dynamic(
   }
 );
 
-const Page = dynamic(
-  () => import("react-pdf").then((mod) => mod.Page),
-  {
-    ssr: false,
-    loading: () => <p>Loading page...</p>,
-  }
-);
-
+const Page = dynamic(() => import("react-pdf").then((mod) => mod.Page), {
+  ssr: false,
+  loading: () => <p>Loading page...</p>,
+});
 
 const PDFAnnotatorApp: React.FC = () => {
   // State management
@@ -42,14 +37,19 @@ const PDFAnnotatorApp: React.FC = () => {
   const [annotations, setAnnotations] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-
   // Annotation methods
   const addAnnotation = (type: string) => {
+    const selection = window.getSelection();
+    if (!selection || selection.toString().trim() === "") return; // No text selected
+
     const newAnnotation = {
       id: Date.now(),
       type,
       page: currentPage,
+      text: selection.toString(),
+      range: selection.getRangeAt(0), // Store range for styling
     };
+
     setAnnotations([...annotations, newAnnotation]);
   };
 
@@ -87,12 +87,9 @@ const PDFAnnotatorApp: React.FC = () => {
 
   // File Uploader Component
   const FileUploader = () => (
-    <div className="h-screen bg-[#eff1fa] flex items-center justify-center flex-col px-10">
-      <div className="fixed top-0 left-0 z-10 flex items-center justify-between h-[4rem] shadow-xl bg-[#8334c2] w-full p-4">
-        <div className="flex items-center gap-4">PDF Annotator</div>
-      </div>
+    <div className="h-screen bg-gray-100 flex items-center justify-center flex-col">
       <div
-        className={`w-full h-[500px] flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-blue-50 ${
+        className={`w-[600px] h-[400px] flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-white shadow-lg ${
           dragging ? "border-blue-500" : "border-gray-300"
         }`}
         onDragOver={handleDragOver}
@@ -122,126 +119,83 @@ const PDFAnnotatorApp: React.FC = () => {
 
   // PDF Annotator Component
   const PDFAnnotator = () => (
-    <div className="h-screen bg-[#eff1fa] flex flex-col">
-      <div className="fixed top-0 left-0 z-10 flex items-center justify-between h-[4rem] shadow-xl bg-[#8334c2] w-full p-4">
-        <div className="flex items-center gap-4">
+    <div className="h-screen bg-gray-100 flex flex-col">
+      {/* Top Toolbar */}
+      <div className="h-16 bg-[#8334c2] shadow-lg text-white flex items-center justify-between px-4">
+        <div className="flex items-center space-x-4">
           <button
             onClick={() => setSelectedFile(null)}
-            className="text-white bg-red-500 px-4 py-2 rounded"
+            className="text-white px-4 py-2 bg-red-600 rounded"
           >
             Back to Upload
           </button>
-          PDF Annotator
+          <div className="text-xl font-semibold text-gray-800">
+            PDF Annotator
+          </div>
         </div>
-        <div className="flex items-center justify-end gap-3">
-          <span
-            className="flex p-2 border border-white rounded-md cursor-pointer"
+        <div className="flex items-center space-x-4">
+          <button
+            className="p-2 hover:bg-gray-100 rounded"
             onClick={() => {
               const newAnnotations = [...annotations];
               newAnnotations.pop();
               setAnnotations(newAnnotations);
             }}
           >
-            <FaUndo size={18} />
-          </span>
-          <span className="flex p-2 border border-white rounded-md cursor-pointer">
-            <FaRedo size={18} />
-          </span>
-          <span className="flex p-2 border bg-white rounded-md text-[#8334c2] text-sm font-semibold cursor-pointer">
+            <FaUndo size={18} className="text-white" />
+          </button>
+          <button className="p-2 hover:bg-gray-100 rounded">
+            <FaRedo size={18} className="text-white" />
+          </button>
+          <button className="bg-white text-[#8334c2] px-4 py-2 rounded">
             Finish
-          </span>
+          </button>
         </div>
       </div>
 
-      <div className="h-full flex max-h-screen overflow-y-scroll bg-gray-100 mt-[4rem]">
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
         {/* Annotation Sidebar */}
-        <div className="fixed left-0 top-0 h-screen w-16 bg-white text-black flex flex-col gap-0 items-center pt-[5em] space-y-6 shadow-lg">
-          <span
-            className="flex p-3 hover:rounded-md hover:bg-[#eff1fa] cursor-pointer"
+        <div className="w-16 bg-white border-r shadow-md flex flex-col items-center pt-4 space-y-4">
+          <button
+            className="p-3 hover:bg-[#f1e0ff] rounded"
             onClick={() => addAnnotation("underline")}
           >
-            <FaUnderline size={24} />
-          </span>
-          <span
-            className="flex p-3 hover:rounded-md hover:bg-[#eff1fa] cursor-pointer"
+            <FaUnderline size={24} className="text-gray-700" />
+          </button>
+          <button
+            className="p-3 hover:bg-[#f1e0ff] rounded"
             onClick={() => addAnnotation("highlight")}
           >
-            <FaHighlighter size={24} />
-          </span>
-          <span
-            className="flex p-3 hover:rounded-md hover:bg-[#eff1fa] cursor-pointer"
+            <FaHighlighter size={24} className="text-gray-700" />
+          </button>
+          <button
+            className="p-3 hover:bg-[#f1e0ff] rounded"
             onClick={() => addAnnotation("comment")}
           >
-            <FaComment size={24} />
-          </span>
+            <FaComment size={24} className="text-gray-700" />
+          </button>
         </div>
 
-        {/* PDF Content */}
-        <div className="ml-16 flex-1 flex-col items-center justify-center">
-          <Document
-            file={selectedFile}
-            onLoadSuccess={onDocumentLoadSuccess}
-            className="mx-auto"
-          >
-            <Page
-              pageNumber={currentPage}
-              width={800}
-              renderAnnotationLayer={true}
-              renderTextLayer={true}
-            />
-          </Document>
-
-          {/* Annotation List for Current Page */}
-          <div className="mt-4 mx-auto w-[800px]">
-            <h3 className="text-lg font-bold mb-2">
-              Annotations on Page {currentPage}
-            </h3>
-            {annotations
-              .filter((annotation) => annotation.page === currentPage)
-              .map((annotation) => (
+        {/* Document Area */}
+        <div className="flex-1 overflow-auto p-8 bg-gray-100">
+          <Document file={selectedFile} onLoadSuccess={onDocumentLoadSuccess}>
+            <div className="flex flex-col items-center space-y-8">
+              {Array.from({ length: numPages }, (_, index) => (
                 <div
-                  key={annotation.id}
-                  className="bg-white p-2 rounded mb-2 flex justify-between items-center"
+                  key={index}
+                  className="bg-white rounded-2xl shadow-xl overflow-hidden w-[794px] min-h-[1123px] border border-gray-200"
                 >
-                  <span>
-                    {annotation.type.charAt(0).toUpperCase() +
-                      annotation.type.slice(1)}
-                    Annotation
-                  </span>
-                  <button
-                    onClick={() => {
-                      setAnnotations(
-                        annotations.filter((a) => a.id !== annotation.id)
-                      );
-                    }}
-                    className="text-red-500"
-                  >
-                    Delete
-                  </button>
+                  <Page
+                    pageNumber={index + 1}
+                    width={794}
+                    renderAnnotationLayer
+                    renderTextLayer
+                  />
                 </div>
               ))}
-          </div>
-
-          {/* Page Navigation */}
-          <div className="flex justify-center mt-4 space-x-4">
-            <button
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((prev) => prev - 1)}
-              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span>
-              Page {currentPage} of {numPages}
-            </span>
-            <button
-              disabled={currentPage >= numPages}
-              onClick={() => setCurrentPage((prev) => prev + 1)}
-              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+            </div>
+          </Document>
         </div>
       </div>
     </div>
