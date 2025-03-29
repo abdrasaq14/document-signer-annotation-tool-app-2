@@ -425,6 +425,7 @@ const PDFAnnotatorApp: React.FC = () => {
         const pageElement = document.querySelector(
           `.react-pdf__Page[data-page-number="${selectedPage}"]`
         );
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const pageRect = pageElement?.getBoundingClientRect() || {
           left: 0,
           top: 0,
@@ -798,7 +799,7 @@ const handleMouseMove = (e: React.MouseEvent) => {
 
           // Process regular annotations
           for (const annotation of pageAnnotations) {
-            const { type, rect, color, text } = annotation;
+            const { type, rect, color, } = annotation;
 
             // Convert hex color to rgb values
             const hexToRgb = (hex: string) => {
@@ -873,7 +874,7 @@ const handleMouseMove = (e: React.MouseEvent) => {
       link.click();
 
       setIsExporting(false);
-    } catch (error) {
+    } catch (error:any) {
       console.error("Error exporting PDF:", error);
       setIsExporting(false);
       alert(`Error exporting PDF: ${error.message}`);
