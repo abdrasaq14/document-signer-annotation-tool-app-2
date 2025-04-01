@@ -22,7 +22,7 @@ const Page = dynamic(() => import("react-pdf").then((mod) => mod.Page), {
   loading: () => <p>Loading page...</p>,
 });
 
-// Annotation types with enhanced properties
+// Annotation types 
 interface Annotation {
   id: number;
   type: "highlight" | "underline" | "comment" | "signature" | "freehand";
@@ -48,8 +48,6 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
 }) => {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedText, setSelectedText] = useState<string>("");
-  // const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  // const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectionPosition, setSelectionPosition] = useState<{
     x: number;
     y: number;
@@ -122,6 +120,7 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
         line-height: normal !important;
         position: absolute !important;
       }
+        
     `;
     document.head.appendChild(style);
 
@@ -129,7 +128,14 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
       document.head.removeChild(style);
     };
   }, []);
+  // Add this to prevent text layer abortion when interacting with the document
+  useEffect(() => {
+    const abortController = new AbortController();
 
+    return () => {
+      abortController.abort();
+    };
+  }, []);
   // Function to check if there are any comments
   useEffect(() => {
     const hasComments = annotations.some((ann) => ann.type === "comment");
@@ -137,140 +143,156 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
   }, [annotations]);
 
   // Handle text selection
-  useEffect(() => {
-    const handleMouseUp = () => {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim() !== "") {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
+useEffect(() => {
+  const handleMouseUp = (e: MouseEvent) => {
+    // Don't process if clicking on toolbar
+    if (
+      selectionToolbarRef.current &&
+      selectionToolbarRef.current.contains(e.target as Node)
+    ) {
+      return;
+    }
 
-        if (
-          documentRef.current?.contains(
-            selection.anchorNode?.parentElement as any
-          )
-        ) {
-          const pageContainer = (
-            selection.anchorNode?.parentElement as HTMLElement
-          ).closest(".react-pdf__Page");
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim() !== "") {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
 
-          if (pageContainer) {
-            const pageRect = pageContainer.getBoundingClientRect();
-            const pageNumber = parseInt(
-              pageContainer.getAttribute("data-page-number") || "1"
+      // Find the containing page element more reliably
+      let pageElement = null;
+      let pageNumber = null;
+
+      // Get the closest ancestor with react-pdf__Page class
+      const textNode = selection.anchorNode;
+      if (textNode && textNode.parentElement) {
+        const closest = (
+          node: Element | null,
+          selector: string
+        ): Element | null => {
+          while (node && !node.matches(selector)) {
+            node = node.parentElement;
+          }
+          return node;
+        };
+
+        const textContainer = closest(
+          textNode.parentElement,
+          ".react-pdf__Page__textContent"
+        );
+        if (textContainer) {
+          pageElement = closest(textContainer, ".react-pdf__Page");
+          if (pageElement) {
+            pageNumber = parseInt(
+              pageElement.getAttribute("data-page-number") || "1"
             );
-
-            setSelectedText(selection.toString());
-            setSelectionPosition({
-              x: rect.left - pageRect.left + pageContainer.scrollLeft,
-              y: rect.top - pageRect.top + pageContainer.scrollTop,
-              width: rect.width,
-              height: rect.height,
-            });
-            setSelectedPage(pageNumber);
-            setShowToolbar(true);
           }
         }
-      } else {
-        // Don't clear if clicking on the toolbar itself
-        if (
-          selectionToolbarRef.current &&
-          !selectionToolbarRef.current.contains(document.activeElement)
-        ) {
-          clearSelection();
-        }
       }
-    };
-    const handleMouseDown = (e: MouseEvent) => {
-      // If clicking outside of the selection toolbar, hide it
-      if (
-        showToolbar &&
-        selectionToolbarRef.current &&
-        !selectionToolbarRef.current.contains(e.target as Node)
-      ) {
-        clearSelection();
+
+      if (pageElement && pageNumber) {
+        const pageRect = pageElement.getBoundingClientRect();
+
+        setSelectedText(selection.toString());
+        setSelectionPosition({
+          x: rect.left - pageRect.left,
+          y: rect.top - pageRect.top,
+          width: rect.width,
+          height: rect.height,
+        });
+        setSelectedPage(pageNumber);
+        setShowToolbar(true);
       }
-    };
-
-    document.addEventListener("mouseup", handleMouseUp);
-    document.addEventListener("mousedown", handleMouseDown);
-
-    return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.removeEventListener("mousedown", handleMouseDown);
-    };
-  }, [showToolbar]);
-
-  // SelectionToolbar component to position correctly
-  const SelectionToolbar = () => {
-    if (!showToolbar || !selectionPosition || !selectedPage) return null;
-
-    // Get the current page element for positioning
-    const pageElement = document.querySelector(
-      `.react-pdf__Page[data-page-number="${selectedPage}"]`
-    );
-    if (!pageElement) return null;
-
-    const pageRect = pageElement.getBoundingClientRect();
-
-    // Calculate position relative to the viewport
-    const absoluteX = pageRect.left + selectionPosition.x;
-    const absoluteY = pageRect.top + selectionPosition.y;
-
-    return (
-      <div
-        ref={selectionToolbarRef}
-        className="fixed bg-white rounded-lg shadow-lg flex items-center space-x-2 p-2 z-50"
-        style={{
-          left: absoluteX,
-          top: absoluteY - 35, // Position it just slightly above the text
-          transform: "translateY(-100%)", // This ensures it sits right above the text
-        }}
-      >
-        <button
-          className="p-1 hover:bg-gray-100 rounded-full"
-          onClick={() => addAnnotation("highlight")}
-          title="Highlight"
-        >
-          <FaHighlighter size={16} className="text-gray-700" />
-        </button>
-        <button
-          className="p-1 hover:bg-gray-100 rounded-full"
-          onClick={() => addAnnotation("underline")}
-          title="Underline"
-        >
-          <FaUnderline size={16} className="text-gray-700" />
-        </button>
-        <button
-          className="p-1 hover:bg-gray-100 rounded-full"
-          onClick={() => addAnnotation("comment")}
-          title="Comment"
-        >
-          <FaComment size={16} className="text-gray-700" />
-        </button>
-        <button
-          className="p-1 hover:bg-gray-100 rounded-full"
-          onClick={() => addAnnotation("signature")}
-          title="Signature"
-        >
-          <FaSignature size={16} className="text-gray-700" />
-        </button>
-        <div className="flex border-l pl-2 ml-1">
-          {colorPalette.map((color) => (
-            <button
-              key={color}
-              onClick={() => setCurrentColor(color)}
-              className="w-4 h-4 rounded-full mx-1"
-              style={{
-                backgroundColor: color,
-                border: currentColor === color ? "2px solid black" : "none",
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    );
+    } else if (
+      !selectionToolbarRef.current ||
+      !selectionToolbarRef.current.contains(e.target as Node)
+    ) {
+      clearSelection();
+    }
   };
 
+  // Delay adding the event listener to prevent conflicts with react-pdf
+  const timer = setTimeout(() => {
+    document.addEventListener("mouseup", handleMouseUp);
+  }, 500);
+
+  return () => {
+    clearTimeout(timer);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+}, []);
+  // SelectionToolbar component to position correctly
+// Improve the SelectionToolbar component for more reliable positioning
+const SelectionToolbar = () => {
+  if (!showToolbar || !selectionPosition || !selectedPage) return null;
+
+  // Get the current page element for positioning
+  const pageElement = document.querySelector(
+    `.react-pdf__Page[data-page-number="${selectedPage}"]`
+  );
+  if (!pageElement) return null;
+
+  const pageRect = pageElement.getBoundingClientRect();
+  
+  // Calculate position in viewport coordinates
+  const absoluteX = pageRect.left + selectionPosition.x;
+  // Make sure toolbar is above the selection
+  const absoluteY = pageRect.top + selectionPosition.y - 10;
+
+  return (
+    <div
+      ref={selectionToolbarRef}
+      className="fixed bg-white rounded-lg shadow-lg flex items-center space-x-2 p-2 z-50"
+      style={{
+        left: absoluteX,
+        top: absoluteY,
+        transform: "translateY(-100%)", // Position above the text
+      }}
+      onMouseDown={(e) => e.stopPropagation()} // Prevent document mouseDown from triggering
+    >
+      <button
+        className="p-1 hover:bg-gray-100 rounded-full"
+        onClick={() => addAnnotation("highlight")}
+        title="Highlight"
+      >
+        <FaHighlighter size={16} className="text-gray-700" />
+      </button>
+      <button
+        className="p-1 hover:bg-gray-100 rounded-full"
+        onClick={() => addAnnotation("underline")}
+        title="Underline"
+      >
+        <FaUnderline size={16} className="text-gray-700" />
+      </button>
+      <button
+        className="p-1 hover:bg-gray-100 rounded-full"
+        onClick={() => addAnnotation("comment")}
+        title="Comment"
+      >
+        <FaComment size={16} className="text-gray-700" />
+      </button>
+      <button
+        className="p-1 hover:bg-gray-100 rounded-full"
+        onClick={() => addAnnotation("signature")}
+        title="Signature"
+      >
+        <FaSignature size={16} className="text-gray-700" />
+      </button>
+      <div className="flex border-l pl-2 ml-1">
+        {colorPalette.map((color) => (
+          <button
+            key={color}
+            onClick={() => setCurrentColor(color)}
+            className="w-4 h-4 rounded-full mx-1"
+            style={{
+              backgroundColor: color,
+              border: currentColor === color ? "2px solid black" : "none",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
   const clearSelection = () => {
     setSelectedText("");
     setSelectionPosition(null);
@@ -299,10 +321,11 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
       height: 100%;
       z-index: 2;
     }
-    
-    /* Style for selectable text spans  */
+     
+    /* Style for text spans */
     .react-pdf__Page__textContent span {
       cursor: text !important;
+      color: transparent !important;
     }
     
     /* Ensure text layer stays within PDF boundaries */
@@ -1024,11 +1047,17 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({
                       onClick={() => handlePageChange(index + 1)}
                     >
                       <Page
+                        key={`page_${index + 1}`}
                         pageNumber={index + 1}
                         width={794}
                         renderAnnotationLayer={false}
                         renderTextLayer={true}
                         customTextRenderer={({ str }: { str: string }) => str}
+                        loading={
+                          <div className="h-[1123px] w-full flex items-center justify-center">
+                            Loading page {index + 1}...
+                          </div>
+                        }
                         onRenderSuccess={() => {
                           if (index === 0) {
                             setTimeout(() => {
